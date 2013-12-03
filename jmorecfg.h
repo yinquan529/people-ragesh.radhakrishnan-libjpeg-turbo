@@ -12,6 +12,17 @@
  * optimizations.  Most users will not need to touch this file.
  */
 
+/*
+ * Define ANDROID_RGB to enable specific optimizations for Android
+ *   JCS_RGBA_8888 support
+ *   JCS_RGB_565 support
+ *
+ */
+#ifdef ANDROID
+#ifndef ANDROID_RGB
+#define ANDROID_RGB
+#endif
+#endif
 
 /*
  * Define BITS_IN_JSAMPLE as either
@@ -316,6 +327,9 @@ typedef int boolean;
 #define RGB_GREEN	1	/* Offset of Green */
 #define RGB_BLUE	2	/* Offset of Blue */
 #define RGB_PIXELSIZE	3	/* JSAMPLEs per RGB scanline element */
+#ifdef ANDROID_RGB
+#define RGB_ALPHA   3   /* Offset of Alpha */
+#endif
 
 #define JPEG_NUMCS 16
 
@@ -372,6 +386,29 @@ static const int rgb_pixelsize[JPEG_NUMCS] = {
   EXT_BGR_PIXELSIZE, EXT_BGRX_PIXELSIZE, EXT_XBGR_PIXELSIZE, EXT_XRGB_PIXELSIZE,
   EXT_RGBX_PIXELSIZE, EXT_BGRX_PIXELSIZE, EXT_XBGR_PIXELSIZE, EXT_XRGB_PIXELSIZE
 };
+
+
+/*
+ * Define ANDROID_RGB to enable specific optimizations for Android
+ *   JCS_RGBA_8888 support
+ *   JCS_RGB_565 support
+ *
+ */
+
+#ifdef ANDROID_RGB
+#define PACK_SHORT_565(r,g,b)  ((((r)<<8)&0xf800)|(((g)<<3)&0x7E0)|((b)>>3))
+#define PACK_TWO_PIXELS(l,r)   ((r<<16) | l)
+#define PACK_NEED_ALIGNMENT(ptr) (((int)(ptr))&3)
+#define WRITE_TWO_PIXELS(addr, pixels) do {     \
+         ((INT16*)(addr))[0] = (pixels);        \
+         ((INT16*)(addr))[1] = (pixels)>>16;    \
+    } while(0)
+#define WRITE_TWO_ALIGNED_PIXELS(addr, pixels)  ((*(INT32*)(addr)) = pixels)
+#define DITHER_565_R(r, dither) ((r) + ((dither)&0xFF))
+#define DITHER_565_G(g, dither) ((g) + (((dither)&0xFF)>>1))
+#define DITHER_565_B(b, dither) ((b) + ((dither)&0xFF))
+#endif
+
 
 /* Definitions for speed-related optimizations. */
 
