@@ -188,7 +188,11 @@ enum TJPF
    * decompressing, the X component is guaranteed to be 0xFF, which can be
    * interpreted as an opaque alpha channel.
    */
-  TJPF_ARGB
+  TJPF_ARGB,
+#ifdef ANDROID
+  TJPF_RGB565
+#endif /* ANDROID */
+  
 };
 
 /**
