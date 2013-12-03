@@ -16,6 +16,7 @@
 #define jsimd_can_rgb_ycc                 jSCanRgbYcc
 #define jsimd_can_rgb_gray                jSCanRgbGry
 #define jsimd_can_ycc_rgb                 jSCanYccRgb
+#define jsimd_can_ycc_android_rgb         jSCanYccAndroidRgb
 #define jsimd_rgb_ycc_convert             jSRgbYccConv
 #define jsimd_rgb_gray_convert            jSRgbGryConv
 #define jsimd_ycc_rgb_convert             jSYccRgbConv
@@ -40,6 +41,7 @@
 EXTERN(int) jsimd_can_rgb_ycc JPP((void));
 EXTERN(int) jsimd_can_rgb_gray JPP((void));
 EXTERN(int) jsimd_can_ycc_rgb JPP((void));
+EXTERN(int) jsimd_can_ycc_android_rgb JPP((void));
 
 EXTERN(void) jsimd_rgb_ycc_convert
         JPP((j_compress_ptr cinfo,
@@ -95,4 +97,18 @@ EXTERN(void) jsimd_h2v1_merged_upsample
         JPP((j_decompress_ptr cinfo,
              JSAMPIMAGE input_buf, JDIMENSION in_row_group_ctr,
              JSAMPARRAY output_buf));
+#ifdef ANDROID
+ EXTERN(void) yyvup2abgr8888_venum(UINT8* inptr0,
+                         UINT8* inptr2,
+                         UINT8* inptr1,
+                         UINT8* outptr,
+                         JDIMENSION output_width);
+
+EXTERN(void) yyvup2bgr888_venum(UINT8* inptr00,
+                       UINT8* inptr2,
+                       UINT8* inptr1,
+                       UINT8* outptr0,
+                       JDIMENSION output_width);
+
+#endif
 
