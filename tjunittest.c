@@ -73,6 +73,9 @@ const int alphaOffset[TJ_NUMPF] = {-1, -1, -1, -1, -1, -1, -1, 3, 3, 0, 0};
 
 const int _3byteFormats[]={TJPF_RGB, TJPF_BGR};
 const int _4byteFormats[]={TJPF_RGBX, TJPF_BGRX, TJPF_XBGR, TJPF_XRGB};
+#ifdef ANDROID
+const int _2byteFormats[]={TJPF_RGB565};
+#endif
 const int _onlyGray[]={TJPF_GRAY};
 const int _onlyRGB[]={TJPF_RGB};
 
@@ -628,7 +631,11 @@ int main(int argc, char *argv[])
 	doTest(35, 39, _onlyGray, 1, TJSAMP_GRAY, "test");
 	doTest(39, 41, _3byteFormats, 2, TJSAMP_GRAY, "test");
 	doTest(41, 35, _4byteFormats, 4, TJSAMP_GRAY, "test");
+#ifdef ANDROID
+	doTest(41, 35, _2byteFormats, 1, TJSAMP_GRAY, "test");
+#endif
 	if(!doyuv) bufSizeTest();
+
 	if(doyuv)
 	{
 		yuv=YUVDECODE;
