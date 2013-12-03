@@ -16,7 +16,7 @@
  *
  * This code contributed by James Arthur Boucher.
  */
-
+#include "config.h"
 #include "cdjpeg.h"		/* Common decls for cjpeg/djpeg applications */
 
 #ifdef BMP_SUPPORTED
@@ -89,13 +89,35 @@ put_pixel_rows (j_decompress_ptr cinfo, djpeg_dest_ptr dinfo,
    */
   inptr = dest->pub.buffer[0];
   outptr = image_ptr[0];
-  for (col = cinfo->output_width; col > 0; col--) {
-    outptr[2] = *inptr++;	/* can omit GETJSAMPLE() safely */
-    outptr[1] = *inptr++;
-    outptr[0] = *inptr++;
-    outptr += 3;
-  }
+#ifdef ANDROID
+  if(cinfo->out_color_space == JCS_RGB_565) {
 
+  #define red_mask    0xF800
+  #define green_mask  0x7E0
+  #define blue_mask   0x1F
+    unsigned char 	r, g, b;
+    unsigned short  	*buf = (unsigned short *)inptr;
+    for (col = cinfo->output_width; col > 0; col--) {
+      r = (*buf & red_mask) >> 11;
+      g = (*buf & green_mask) >> 5;
+      b = (*buf & blue_mask);
+      outptr[0] = b<<3;
+      outptr[1] = g<<2;
+      outptr[2] = r<<3;
+      outptr += 3;
+      buf++;
+    }
+  }
+  else
+#endif
+  {
+      for (col = cinfo->output_width; col > 0; col--) {
+        outptr[2] = *inptr++;	/* can omit GETJSAMPLE() safely */
+        outptr[1] = *inptr++;
+        outptr[0] = *inptr++;
+        outptr += 3;
+      }
+  }
   /* Zero out the pad bytes. */
   pad = dest->pad_bytes;
   while (--pad >= 0)
@@ -181,7 +203,14 @@ write_bmp_header (j_decompress_ptr cinfo, bmp_dest_ptr dest)
       bits_per_pixel = 24;
       cmap_entries = 0;
     }
-  } else {
+  }
+#ifdef ANDROID
+  else if(cinfo->out_color_space == JCS_RGB_565) {
+      bits_per_pixel = 24;
+      cmap_entries   = 0;
+  }
+#endif
+  else {
     /* Grayscale output.  We need to fake a 256-entry colormap. */
     bits_per_pixel = 8;
     cmap_entries = 256;
@@ -407,6 +436,10 @@ jinit_write_bmp (j_decompress_ptr cinfo, boolean is_os2)
       dest->pub.put_pixel_rows = put_gray_rows;
     else
       dest->pub.put_pixel_rows = put_pixel_rows;
+#ifdef ANDROID
+  } else if(cinfo->out_color_space == JCS_RGB_565 ) {
+      dest->pub.put_pixel_rows = put_pixel_rows;
+#endif
   } else {
     ERREXIT(cinfo, JERR_BMP_COLORSPACE);
   }
@@ -415,16 +448,34 @@ jinit_write_bmp (j_decompress_ptr cinfo, boolean is_os2)
   jpeg_calc_output_dimensions(cinfo);
 
   /* Determine width of rows in the BMP file (padded to 4-byte boundary). */
-  row_width = cinfo->output_width * cinfo->output_components;
-  dest->data_width = row_width;
-  while ((row_width & 3) != 0) row_width++;
-  dest->row_width = row_width;
-  dest->pad_bytes = (int) (row_width - dest->data_width);
+#ifdef ANDROID
+  if(cinfo->out_color_space == JCS_RGB_565) {
+    row_width = cinfo->output_width *2;
+    dest->row_width = dest->data_width = cinfo->output_width*3;
+  }
+  else
+#endif
+  {
+    row_width = cinfo->output_width * cinfo->output_components;
+    dest->row_width = dest->data_width = row_width;
+  }
+  while ((dest->row_width & 3) != 0) dest->row_width++;
+  dest->pad_bytes = (int) (dest->row_width - dest->data_width);
+#ifdef ANDROID
+  if(cinfo->out_color_space == JCS_RGB_565) {
+    while ((row_width & 3)!=0) row_width++;
+  }
+  else
+#endif
+  {
+    row_width = dest->row_width;
+  }
+
 
   /* Allocate space for inversion array, prepare for write pass */
   dest->whole_image = (*cinfo->mem->request_virt_sarray)
     ((j_common_ptr) cinfo, JPOOL_IMAGE, FALSE,
-     row_width, cinfo->output_height, (JDIMENSION) 1);
+     dest->row_width, cinfo->output_height, (JDIMENSION) 1);
   dest->cur_output_row = 0;
   if (cinfo->progress != NULL) {
     cd_progress_ptr progress = (cd_progress_ptr) cinfo->progress;
