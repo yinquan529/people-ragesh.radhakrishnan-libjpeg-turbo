@@ -37,6 +37,8 @@ typedef struct {
 typedef my_color_deconverter * my_cconvert_ptr;
 
 
+
+
 /**************** YCbCr -> RGB conversion: most common case **************/
 /****************   RGB -> Y   conversion: less common case **************/
 
@@ -89,8 +91,13 @@ typedef my_color_deconverter * my_cconvert_ptr;
 
 
 /* Include inline routines for colorspace extensions */
+#ifdef ANDROID_RGB
+#include "jdcoldroidext.c"
+#endif /* ANDROID_RGB */
+
 
 #include "jdcolext.c"
+
 #undef RGB_RED
 #undef RGB_GREEN
 #undef RGB_BLUE
@@ -260,6 +267,9 @@ ycc_rgb_convert (j_decompress_ptr cinfo,
       break;
     case JCS_EXT_RGBX:
     case JCS_EXT_RGBA:
+#ifdef ANDROID_RGB
+    case JCS_RGBA_8888:
+#endif /* ANDROID_RGB */
       ycc_extrgbx_convert_internal(cinfo, input_buf, input_row, output_buf,
                                    num_rows);
       break;
@@ -416,6 +426,9 @@ gray_rgb_convert (j_decompress_ptr cinfo,
       break;
     case JCS_EXT_RGBX:
     case JCS_EXT_RGBA:
+    #ifdef ANDROID_RGB
+    case JCS_RGBA_8888:
+    #endif /* ANDROID_RGB */
       gray_extrgbx_convert_internal(cinfo, input_buf, input_row, output_buf,
                                     num_rows);
       break;
@@ -462,6 +475,9 @@ rgb_rgb_convert (j_decompress_ptr cinfo,
       break;
     case JCS_EXT_RGBX:
     case JCS_EXT_RGBA:
+    #ifdef ANDROID_RGB
+    case JCS_RGBA_8888:
+    #endif /* ANDROID_RGB */
       rgb_extrgbx_convert_internal(cinfo, input_buf, input_row, output_buf,
                                    num_rows);
       break;
@@ -649,6 +665,61 @@ jinit_color_deconverter (j_decompress_ptr cinfo)
       ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
     break;
 
+
+
+#ifdef ANDROID_RGB
+
+
+  case JCS_RGBA_8888:
+    cinfo->out_color_components = 4;
+    if (cinfo->jpeg_color_space == JCS_YCbCr) {
+      if (jsimd_can_ycc_rgb())
+        cconvert->pub.color_convert = jsimd_ycc_rgb_convert;
+      else {
+        cconvert->pub.color_convert = ycc_rgb_convert;
+        build_ycc_rgb_table(cinfo);
+      }
+    } else if (cinfo->jpeg_color_space == JCS_GRAYSCALE) {
+      cconvert->pub.color_convert = gray_rgb_convert;
+    } else if (cinfo->jpeg_color_space == JCS_RGB) {
+        cconvert->pub.color_convert = rgb_rgb_convert;
+   } else
+      ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
+    break;
+
+  case JCS_RGB_565:
+    cinfo->out_color_components = 3;
+    if (cinfo->dither_mode == JDITHER_NONE) {
+      if (cinfo->jpeg_color_space == JCS_YCbCr) {
+        cconvert->pub.color_convert = ycc_rgb_565_convert;
+#ifndef ANDROID_JPEG_USE_VENUM
+        build_ycc_rgb_table(cinfo);
+#endif
+      } else if (cinfo->jpeg_color_space == JCS_GRAYSCALE) {
+        cconvert->pub.color_convert = gray_rgb_565_convert;
+      } else if (cinfo->jpeg_color_space == JCS_RGB) {
+        cconvert->pub.color_convert = rgb_rgb_565_convert;
+      } else
+        ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
+    } else {
+      /* only ordered dither is supported */
+      if (cinfo->jpeg_color_space == JCS_YCbCr) {
+#ifdef ANDROID_JPEG_USE_VENUM
+        /* Use VeNum routine even if dithering option is selected. */
+        cconvert->pub.color_convert = ycc_rgb_565_convert;
+#else
+        cconvert->pub.color_convert = ycc_rgb_565D_convert;
+        build_ycc_rgb_table(cinfo);
+#endif
+      } else if (cinfo->jpeg_color_space == JCS_GRAYSCALE) {
+        cconvert->pub.color_convert = gray_rgb_565D_convert;
+      } else if (cinfo->jpeg_color_space == JCS_RGB) {
+        cconvert->pub.color_convert = rgb_rgb_565D_convert;
+      } else
+        ERREXIT(cinfo, JERR_CONVERSION_NOTIMPL);
+    }
+    break;
+#endif /* ANDROID_RGB */
   case JCS_CMYK:
     cinfo->out_color_components = 4;
     if (cinfo->jpeg_color_space == JCS_YCCK) {
