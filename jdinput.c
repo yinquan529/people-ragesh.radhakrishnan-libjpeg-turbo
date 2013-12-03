@@ -32,11 +32,87 @@ typedef my_input_controller * my_inputctl_ptr;
 
 /* Forward declarations */
 METHODDEF(int) consume_markers JPP((j_decompress_ptr cinfo));
-
+#ifdef ANDROID
+METHODDEF(int) consume_markers_with_huffman_index JPP((j_decompress_ptr cinfo,
+                    huffman_index *index, int current_scan));
+#endif /* ANDROID */
 
 /*
  * Routines to calculate various quantities related to the size of the image.
  */
+
+
+#if JPEG_LIB_VERSION >= 80
+/*
+ * Compute output image dimensions and related values.
+ * NOTE: this is exported for possible use by application.
+ * Hence it mustn't do anything that can't be done twice.
+ */
+
+GLOBAL(void)
+jpeg_core_output_dimensions (j_decompress_ptr cinfo)
+/* Do computations that are needed before master selection phase.
+ * This function is used for transcoding and full decompression.
+ */
+{
+#ifdef IDCT_SCALING_SUPPORTED
+  int ci;
+  jpeg_component_info *compptr;
+
+  /* Compute actual output image dimensions and DCT scaling choices. */
+  if (cinfo->scale_num * cinfo->block_size <= cinfo->scale_denom) {
+    /* Provide 1/block_size scaling */
+    cinfo->output_width = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_width, (long) cinfo->block_size);
+    cinfo->output_height = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_height, (long) cinfo->block_size);
+    cinfo->min_DCT_h_scaled_size = 1;
+    cinfo->min_DCT_v_scaled_size = 1;
+  } else if (cinfo->scale_num * cinfo->block_size <= cinfo->scale_denom * 2) {
+    /* Provide 2/block_size scaling */
+    cinfo->output_width = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_width * 2L, (long) cinfo->block_size);
+    cinfo->output_height = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_height * 2L, (long) cinfo->block_size);
+    cinfo->min_DCT_h_scaled_size = 2;
+    cinfo->min_DCT_v_scaled_size = 2;
+  } else if (cinfo->scale_num * cinfo->block_size <= cinfo->scale_denom * 4) {
+    /* Provide 4/block_size scaling */
+    cinfo->output_width = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_width * 4L, (long) cinfo->block_size);
+    cinfo->output_height = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_height * 4L, (long) cinfo->block_size);
+    cinfo->min_DCT_h_scaled_size = 4;
+    cinfo->min_DCT_v_scaled_size = 4;
+  } else if (cinfo->scale_num * cinfo->block_size <= cinfo->scale_denom * 8) {
+    /* Provide 8/block_size scaling */
+    cinfo->output_width = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_width * 8L, (long) cinfo->block_size);
+    cinfo->output_height = (JDIMENSION)
+      jdiv_round_up((long) cinfo->image_height * 8L, (long) cinfo->block_size);
+    cinfo->min_DCT_h_scaled_size = 8;
+    cinfo->min_DCT_v_scaled_size = 8;
+  }
+  /* Recompute dimensions of components */
+  for (ci = 0, compptr = cinfo->comp_info; ci < cinfo->num_components;
+       ci++, compptr++) {
+    compptr->DCT_h_scaled_size = cinfo->min_DCT_h_scaled_size;
+    compptr->DCT_v_scaled_size = cinfo->min_DCT_v_scaled_size;
+  }
+
+#else /* !IDCT_SCALING_SUPPORTED */
+
+  /* Hardwire it to "no scaling" */
+  cinfo->output_width = cinfo->image_width;
+  cinfo->output_height = cinfo->image_height;
+  /* jdinput.c has already initialized DCT_scaled_size,
+   * and has computed unscaled downsampled_width and downsampled_height.
+   */
+
+#endif /* IDCT_SCALING_SUPPORTED */
+}
+#endif
+
 
 LOCAL(void)
 initial_setup (j_decompress_ptr cinfo)
@@ -131,6 +207,10 @@ initial_setup (j_decompress_ptr cinfo)
     cinfo->inputctl->has_multiple_scans = TRUE;
   else
     cinfo->inputctl->has_multiple_scans = FALSE;
+
+#ifdef ANDROID
+  cinfo->original_image_width = cinfo->image_width;
+#endif /* ANDROID */
 }
 
 
@@ -196,6 +276,16 @@ per_scan_setup (j_decompress_ptr cinfo)
       tmp = (int) (compptr->width_in_blocks % compptr->MCU_width);
       if (tmp == 0) tmp = compptr->MCU_width;
       compptr->last_col_width = tmp;
+
+#ifdef ANDROID_TILE_BASED_DECODE
+      if (cinfo->tile_decode) {
+        tmp = (int) (jdiv_round_up(cinfo->image_width, 8)
+                % compptr->MCU_width);
+        if (tmp == 0) tmp = compptr->MCU_width;
+        compptr->last_col_width = tmp;
+      }
+#endif
+
       tmp = (int) (compptr->height_in_blocks % compptr->MCU_height);
       if (tmp == 0) tmp = compptr->MCU_height;
       compptr->last_row_height = tmp;
@@ -275,6 +365,10 @@ start_input_pass (j_decompress_ptr cinfo)
   (*cinfo->entropy->start_pass) (cinfo);
   (*cinfo->coef->start_input_pass) (cinfo);
   cinfo->inputctl->consume_input = cinfo->coef->consume_data;
+#ifdef ANDROID
+  cinfo->inputctl->consume_input_build_huffman_index =
+         cinfo->coef->consume_data_build_huffman_index;
+#endif /* ANDROID */
 }
 
 
@@ -288,6 +382,10 @@ METHODDEF(void)
 finish_input_pass (j_decompress_ptr cinfo)
 {
   cinfo->inputctl->consume_input = consume_markers;
+#ifdef ANDROID
+  cinfo->inputctl->consume_input_build_huffman_index =
+         consume_markers_with_huffman_index;
+#endif /* ANDROID */
 }
 
 
@@ -361,6 +459,11 @@ reset_input_controller (j_decompress_ptr cinfo)
   inputctl->pub.has_multiple_scans = FALSE; /* "unknown" would be better */
   inputctl->pub.eoi_reached = FALSE;
   inputctl->inheaders = TRUE;
+#ifdef ANDROID
+  inputctl->pub.consume_input_build_huffman_index =
+        consume_markers_with_huffman_index;
+#endif /* ANDROID */
+
   /* Reset other modules */
   (*cinfo->err->reset_error_mgr) ((j_common_ptr) cinfo);
   (*cinfo->marker->reset_marker_reader) (cinfo);
@@ -395,4 +498,27 @@ jinit_input_controller (j_decompress_ptr cinfo)
   inputctl->pub.has_multiple_scans = FALSE; /* "unknown" would be better */
   inputctl->pub.eoi_reached = FALSE;
   inputctl->inheaders = TRUE;
+
+#ifdef ANDROID
+  inputctl->pub.consume_markers = consume_markers_with_huffman_index;
+  inputctl->pub.consume_input_build_huffman_index =
+        consume_markers_with_huffman_index;
+#endif /* ANDROID */
 }
+
+#ifdef ANDROID
+
+GLOBAL(void)
+jpeg_decompress_per_scan_setup(j_decompress_ptr cinfo)
+{
+    per_scan_setup(cinfo);
+}
+
+METHODDEF(int)
+consume_markers_with_huffman_index (j_decompress_ptr cinfo,
+        huffman_index *index, int current_scan)
+{
+    return consume_markers(cinfo);
+}
+
+#endif /* ANDROID */
