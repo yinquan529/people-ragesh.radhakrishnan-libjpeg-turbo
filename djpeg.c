@@ -66,7 +66,10 @@ typedef enum {
 	FMT_PPM,		/* PPM/PGM (PBMPLUS formats) */
 	FMT_RLE,		/* RLE format */
 	FMT_TARGA,		/* Targa format */
-	FMT_TIFF		/* TIFF format */
+	FMT_TIFF,		/* TIFF format */
+#ifdef ANDROID
+        FMT_BMP_565            /* BMP 16bit format (Windows flavor)*/
+#endif /* ANDROID */
 } IMAGE_FORMATS;
 
 #ifndef DEFAULT_FMT		/* so can override from CFLAGS in Makefile */
@@ -113,6 +116,9 @@ usage (void)
 #ifdef BMP_SUPPORTED
   fprintf(stderr, "  -bmp           Select BMP output format (Windows style)%s\n",
 	  (DEFAULT_FMT == FMT_BMP ? " (default)" : ""));
+#ifdef ANDROID
+  fprintf(stderr, "  -bmp565        Select BMP output format for rgb565 (Windows style)\n");
+#endif /* D_ANDROID_COMMON */
 #endif
 #ifdef GIF_SUPPORTED
   fprintf(stderr, "  -gif           Select GIF output format%s\n",
@@ -206,7 +212,12 @@ parse_switches (j_decompress_ptr cinfo, int argc, char **argv,
     if (keymatch(arg, "bmp", 1)) {
       /* BMP output format. */
       requested_fmt = FMT_BMP;
-
+#ifdef ANDROID
+    } else if(keymatch(arg,"bmp565",1)){
+      /*BMP output format 24 bit */
+       requested_fmt= FMT_BMP_565;
+       cinfo->out_color_space = JCS_RGB_565;
+#endif /* ANDROID */
     } else if (keymatch(arg, "colors", 1) || keymatch(arg, "colours", 1) ||
 	       keymatch(arg, "quantize", 1) || keymatch(arg, "quantise", 1)) {
       /* Do color quantization. */
@@ -593,6 +604,9 @@ main (int argc, char **argv)
   switch (requested_fmt) {
 #ifdef BMP_SUPPORTED
   case FMT_BMP:
+#ifdef ANDROID
+  case FMT_BMP_565:
+#endif /* ANDROID */
     dest_mgr = jinit_write_bmp(&cinfo, FALSE);
     break;
   case FMT_OS2:
