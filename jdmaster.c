@@ -120,10 +120,10 @@ jpeg_core_output_dimensions (j_decompress_ptr cinfo)
 #endif
 
   /* Prevent application from calling me at wrong times */
-#if ANDROID
+#if ANDROID_TILE_BASED_DECODE
   // Tile based decoding may call this function several times.
   if (!cinfo->tile_decode)
-#endif /* ANDROID */
+#endif /* ANDROID_TILE_BASED_DECODE */
     if (cinfo->global_state != DSTATE_READY)
       ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
@@ -295,10 +295,6 @@ jpeg_calc_output_dimensions (j_decompress_ptr cinfo)
   int ci;
   jpeg_component_info *compptr;
 #endif
-
-  /* Prevent application from calling me at wrong times */
-  if (cinfo->global_state != DSTATE_READY)
-    ERREXIT1(cinfo, JERR_BAD_STATE, cinfo->global_state);
 
   /* Compute core output image dimensions and DCT scaling choices. */
   jpeg_core_output_dimensions(cinfo);
